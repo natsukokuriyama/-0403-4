@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black Cat Health Log v12</title>
+    <title>Black Cat Health Log v12.1</title>
     <style>
         :root {
             --main-bg: #121212;
@@ -54,25 +54,6 @@
             font-size: 1rem;
         }
 
-        /* 時刻調整ボタンのスタイル */
-        .time-adjuster {
-            display: flex;
-            justify-content: space-between;
-            gap: 5px;
-            margin-bottom: 15px;
-        }
-        .adj-btn {
-            flex: 1;
-            padding: 8px 0;
-            font-size: 0.75rem;
-            background: #333;
-            color: var(--accent-color);
-            border: 1px solid #444;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        .adj-btn:active { background: #444; }
-
         button {
             width: 100%;
             padding: 14px;
@@ -122,15 +103,8 @@
 
     <div class="card" id="inputCard">
         <h2 id="formTitle">📝 記録入力</h2>
-        <label>日時を選択（ボタンで微調整できます）</label>
+        <label>日時を選択</label>
         <input type="datetime-local" id="recordDateTime">
-        
-        <div class="time-adjuster">
-            <button class="adj-btn" onclick="adjustTime(-60)">-1時間</button>
-            <button class="adj-btn" onclick="adjustTime(-10)">-10分</button>
-            <button class="adj-btn" onclick="adjustTime(10)">+10分</button>
-            <button class="adj-btn" onclick="adjustTime(60)">+1時間</button>
-        </div>
         
         <label>ごはんの内容（頻度の高い順に並んでいます）</label>
         <select id="foodSelect"></select>
@@ -211,25 +185,11 @@
 
     function setCurrentDateTime() {
         const now = new Date();
-        formatAndSetDateTime(now);
-    }
-
-    // 日時をフォーマットして入力欄にセットする共通関数
-    function formatAndSetDateTime(dateObj) {
-        const dateStr = getLocalDateString(dateObj);
-        const hh = String(dateObj.getHours()).padStart(2, '0');
-        const min = String(dateObj.getMinutes()).padStart(2, '0');
+        const dateStr = getLocalDateString(now);
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
         const el = document.getElementById('recordDateTime');
         if(el) el.value = `${dateStr}T${hh}:${min}`;
-    }
-
-    // 時刻をクイック調整する関数 (課題2)
-    function adjustTime(minutes) {
-        const el = document.getElementById('recordDateTime');
-        if(!el.value) return;
-        const currentDt = new Date(el.value);
-        currentDt.setMinutes(currentDt.getMinutes() + minutes);
-        formatAndSetDateTime(currentDt);
     }
 
     function saveSettings() {
@@ -289,7 +249,7 @@
         }
     }
 
-    // 利用頻度を計算してセレクトボックスを更新する (課題1)
+    // 利用頻度を計算してセレクトボックスを更新する
     function updateFoodSelect() {
         const select = document.getElementById('foodSelect');
         const masterList = document.getElementById('masterDisplay');
