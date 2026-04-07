@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black Cat Health Log v10</title>
+    <title>Black Cat Health Log v11</title>
     <style>
         :root {
             --main-bg: #121212;
@@ -67,22 +67,52 @@
         }
 
         .history-list { display: flex; flex-direction: column; gap: 12px; }
+        
+        /* 折りたたみ用のスタイル改修 */
         .day-group {
             background: #252525;
-            padding: 15px;
+            padding: 0;
             border-radius: 12px;
             border: 1px solid #333;
+            overflow: hidden;
         }
+        
+        details { width: 100%; }
+        
+        summary {
+            list-style: none; /* デフォルトの矢印を消す（一部ブラウザ用） */
+            cursor: pointer;
+            padding: 15px;
+            outline: none;
+        }
+        
+        summary::-webkit-details-marker { display: none; } /* Safariの矢印を消す */
+
         .day-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #444;
-            padding-bottom: 8px;
-            margin-bottom: 8px;
         }
+        
+        /* 日付の横に「開閉できること」を示すアイコンを追加 */
+        .day-date::before {
+            content: "▶";
+            font-size: 0.7rem;
+            margin-right: 8px;
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+        details[open] .day-date::before {
+            transform: rotate(90deg);
+        }
+
         .day-date { font-weight: bold; color: var(--accent-color); }
         .day-total { font-size: 0.8rem; color: #aaa; }
+
+        .day-content {
+            padding: 0 15px 15px 15px;
+            border-top: 1px solid #333;
+        }
 
         .entry-item {
             display: flex;
@@ -111,10 +141,9 @@
             font-weight: bold;
         }
 
-        .today-row { border-color: var(--accent-color); background: #1e1e0a; }
+        .today-row { border: 2px solid var(--accent-color); background: #1e1e0a; }
         .edit-active { border: 2px solid var(--accent-color); background: #2d2d00; }
 
-        /* マスターリスト用のスタイル */
         .master-list { list-style: none; padding: 0; margin-top: 15px; font-size: 0.85rem; }
         .master-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #444; }
         .master-actions { display: flex; gap: 5px; }
@@ -149,7 +178,7 @@
     </div>
 
     <div class="card">
-        <h2>📅 履歴 (最新31日分)</h2>
+        <h2>📅 履歴 (最新14日分)</h2>
         <div id="historyList" class="history-list"></div>
     </div>
 
@@ -185,7 +214,7 @@
     let healthLogs = [];
     let userSettings = { gasUrl: '' };
     let editingIndex = -1;
-    let editingMasterIndex = -1; // マスター編集用の状態管理
+    let editingMasterIndex = -1;
 
     function loadData() {
         try {
@@ -209,7 +238,6 @@
         renderHistory();
     }
 
-    // 日本時間での正確な日付文字列 (YYYY-MM-DD) を取得する関数
     function getLocalDateString(dateObj) {
         const yyyy = dateObj.getFullYear();
         const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -232,7 +260,6 @@
         renderHistory(); 
     }
 
-    // マスター保存（新規追加・上書き修正の両方に対応）
     function saveFoodMaster() {
         const name = document.getElementById('foodName').value;
         const cal = parseFloat(document.getElementById('foodCal').value);
@@ -240,7 +267,6 @@
         if(!name || isNaN(cal)) return alert('正しい値を入力してください');
         
         if (editingMasterIndex > -1) {
-            // 修正モードの場合
             foodMaster[editingMasterIndex] = { name, cal, type };
             editingMasterIndex = -1;
             document.getElementById('masterSaveBtn').innerText = "マスターに追加";
@@ -248,38 +274,28 @@
             document.getElementById('masterCard').classList.remove('edit-active');
             alert('マスター情報を更新しました');
         } else {
-            // 新規追加モードの場合
             foodMaster.push({ name, cal, type });
             alert('マスターに登録しました');
         }
-        
         localStorage.setItem('foodMaster', JSON.stringify(foodMaster));
-        
         document.getElementById('foodName').value = "";
         document.getElementById('foodCal').value = "";
-        
         updateFoodSelect();
     }
 
-    // マスターの編集モードを開始する機能
     function editFoodMaster(index) {
         const f = foodMaster[index];
         if(!f) return;
-        
         document.getElementById('foodName').value = f.name;
         document.getElementById('foodCal').value = f.cal;
         document.getElementById('foodType').value = f.type || 'per100g';
-        
         editingMasterIndex = index;
         document.getElementById('masterSaveBtn').innerText = "上書き保存する";
         document.getElementById('masterCancelBtn').style.display = "block";
         document.getElementById('masterCard').classList.add('edit-active');
-        
-        // マスター登録枠までスクロール
         document.getElementById('masterCard').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // マスター編集のキャンセル
     function cancelMasterEdit() {
         editingMasterIndex = -1;
         document.getElementById('foodName').value = "";
@@ -290,7 +306,7 @@
     }
 
     function deleteFoodMaster(index) {
-        if(confirm('このアイテムをマスターから削除しますか？\n※過去の記録でこのフードを選んでいた場合、名前が表示されなくなる可能性があります。')) {
+        if(confirm('削除しますか？')) {
             foodMaster.splice(index, 1);
             localStorage.setItem('foodMaster', JSON.stringify(foodMaster));
             updateFoodSelect();
@@ -300,25 +316,13 @@
     function updateFoodSelect() {
         const select = document.getElementById('foodSelect');
         const masterList = document.getElementById('masterDisplay');
-        
-        if(select) {
-            select.innerHTML = foodMaster.map((f, i) => `<option value="${i}">${f.name}</option>`).join('');
-        }
-        
+        if(select) select.innerHTML = foodMaster.map((f, i) => `<option value="${i}">${f.name}</option>`).join('');
         if(masterList) {
-            if(foodMaster.length === 0) {
-                masterList.innerHTML = "<li style='color:#666;'>まだ登録されていません</li>";
-            } else {
+            if(foodMaster.length === 0) masterList.innerHTML = "<li style='color:#666;'>まだ登録されていません</li>";
+            else {
                 masterList.innerHTML = foodMaster.map((f, i) => {
                     const typeLabel = f.type === 'per100g' ? '100g' : '1袋';
-                    return `
-                    <li class="master-item">
-                        <span>${f.name} <small style="color:#aaa;">(${f.cal}kcal / ${typeLabel})</small></span>
-                        <div class="master-actions">
-                            <button class="btn-edit" onclick="editFoodMaster(${i})">編集</button>
-                            <button class="btn-delete" onclick="deleteFoodMaster(${i})">削除</button>
-                        </div>
-                    </li>`;
+                    return `<li class="master-item"><span>${f.name} <small style="color:#aaa;">(${f.cal}kcal / ${typeLabel})</small></span><div class="master-actions"><button class="btn-edit" onclick="editFoodMaster(${i})">編集</button><button class="btn-delete" onclick="deleteFoodMaster(${i})">削除</button></div></li>`;
                 }).join('');
             }
         }
@@ -327,7 +331,6 @@
     function saveRecord() {
         const dtStr = document.getElementById('recordDateTime').value;
         if(!dtStr) return alert('日時を選択してください');
-        
         const parts = dtStr.split('T');
         const dateStr = parts[0];
         const timeStr = parts[1] || "00:00";
@@ -335,88 +338,37 @@
         const amount = parseFloat(document.getElementById('amount').value) || 0;
         const poop = parseFloat(document.getElementById('poopLength').value) || 0;
 
-        let calResult = 0;
-        let detail = "";
-        let finalFoodIdx = -1;
-        let finalAmount = 0;
+        let calResult = 0; let detail = ""; let finalFoodIdx = -1; let finalAmount = 0;
 
-        if (poop > 0) {
-            detail = `💩 うんち記録 (${poop}cm)`;
-        } else if (amount > 0) {
+        if (poop > 0) detail = `💩 うんち記録 (${poop}cm)`;
+        else if (amount > 0) {
             const food = foodMaster[foodIdx];
             if(food) {
                 const unitLabel = food.type === 'per100g' ? 'g' : '袋';
                 calResult = food.type === 'per100g' ? (food.cal * amount / 100) : (food.cal * amount);
                 detail = `🍴 ${food.name} ${amount}${unitLabel}`;
-                finalFoodIdx = foodIdx;
-                finalAmount = amount;
-            } else {
-                return alert('フードを選択してください');
-            }
-        } else {
-            return alert('量、またはうんちの長さを入力してください');
-        }
+                finalFoodIdx = foodIdx; finalAmount = amount;
+            } else return alert('フードを選択してください');
+        } else return alert('入力してください');
 
-        const newLog = {
-            date: dateStr,
-            time: timeStr,
-            kcal: calResult,
-            poop: poop,
-            detail: detail,
-            amount: finalAmount,
-            foodIdx: finalFoodIdx
-        };
-
-        if(editingIndex > -1) {
-            healthLogs[editingIndex] = newLog;
-            editingIndex = -1;
-        } else {
-            healthLogs.push(newLog);
-        }
+        const newLog = { date: dateStr, time: timeStr, kcal: calResult, poop: poop, detail: detail, amount: finalAmount, foodIdx: finalFoodIdx };
+        if(editingIndex > -1) { healthLogs[editingIndex] = newLog; editingIndex = -1; }
+        else healthLogs.push(newLog);
 
         localStorage.setItem('healthLogs', JSON.stringify(healthLogs));
-        
         syncToGoogleCalendar(dateStr);
-
-        resetForm();
-        renderHistory();
-        
-        if(userSettings.gasUrl) {
-            alert('保存し、カレンダーへ自動同期しました！');
-        } else {
-            alert('保存しました。（GAS設定がないためカレンダーには同期されていません）');
-        }
+        resetForm(); renderHistory();
     }
 
     async function syncToGoogleCalendar(dateStr) {
         const gasUrl = userSettings.gasUrl;
         if (!gasUrl || !gasUrl.startsWith("http")) return;
-
         const dayLogs = healthLogs.filter(l => l.date === dateStr);
         const totalKcal = dayLogs.reduce((sum, l) => sum + (Number(l.kcal) || 0), 0).toFixed(0);
         const totalPoop = dayLogs.reduce((sum, l) => sum + (Number(l.poop) || 0), 0).toFixed(1);
-        
         let details = "■本日の内訳\n";
-        dayLogs.sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")).forEach(l => {
-            details += `・${l.time}：${l.detail}\n`;
-        });
-
-        try {
-            fetch(gasUrl, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    date: dateStr,
-                    totalKcal: totalKcal,
-                    totalPoop: totalPoop,
-                    details: details
-                })
-            });
-            console.log("同期リクエスト送信完了:", dateStr);
-        } catch (e) {
-            console.error("同期エラー:", e);
-        }
+        dayLogs.sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")).forEach(l => { details += `・${l.time}：${l.detail}\n`; });
+        try { fetch(gasUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: dateStr, totalKcal: totalKcal, totalPoop: totalPoop, details: details }) }); } catch (e) {}
     }
 
     function editRecord(index) {
@@ -444,10 +396,7 @@
         }
     }
 
-    function cancelEdit() {
-        editingIndex = -1;
-        resetForm();
-    }
+    function cancelEdit() { editingIndex = -1; resetForm(); }
 
     function resetForm() {
         document.getElementById('formTitle').innerText = "📝 記録入力";
@@ -463,27 +412,28 @@
         const list = document.getElementById('historyList');
         if(!list) return;
         list.innerHTML = '';
-        
         const now = new Date();
-        const todayStr = getLocalDateString(now); // 日本時間の正確な「今日」
+        const todayStr = getLocalDateString(now);
         
         try {
-            for (let i = 0; i < 31; i++) {
+            for (let i = 0; i < 14; i++) { // ③ 最新14日分に変更
                 const d = new Date();
                 d.setDate(now.getDate() - i);
-                const dateStr = getLocalDateString(d); // 日本時間ベースで計算
+                const dateStr = getLocalDateString(d);
                 
                 const dayLogs = healthLogs
                     .map((l, idx) => ({...l, originalIndex: idx}))
                     .filter(l => l.date === dateStr)
                     .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
 
-                // 記録がない日は非表示（ただし今日から7日前までは空でも表示する）
-                if (dayLogs.length === 0 && i > 7) continue;
+                if (dayLogs.length === 0 && i > 0) continue; // 今日以外で記録がない日は飛ばす
 
                 const totalKcal = dayLogs.reduce((sum, l) => sum + (Number(l.kcal) || 0), 0).toFixed(0);
                 const totalPoop = dayLogs.reduce((sum, l) => sum + (Number(l.poop) || 0), 0).toFixed(1);
-                const isToday = dateStr === todayStr ? 'today-row' : '';
+                
+                const isToday = dateStr === todayStr;
+                const openAttr = isToday ? 'open' : ''; // ④ 今日だけ最初から開いておく
+                const rowClass = isToday ? 'today-row' : '';
 
                 let entriesHtml = dayLogs.map(l => `
                     <div class="entry-item">
@@ -500,37 +450,39 @@
 
                 let syncArea = '';
                 if (userSettings.gasUrl && userSettings.gasUrl.startsWith("http")) {
-                    syncArea = `<div class="sync-status">🔄 保存・修正時にカレンダーへ自動同期されます</div>`;
+                    syncArea = `<div class="sync-status">🔄 自動同期設定済み</div>`;
                 } else {
                     const title = `【タマ日報】${totalKcal}kcal / 💩${totalPoop}cm`;
                     const gDate = dateStr.replace(/-/g, '');
                     let details = "■本日の内訳\n";
                     dayLogs.forEach(l => { details += `・${l.time}：${l.detail || '記録'}\n`; });
                     const gUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${gDate}/${gDate}&details=${encodeURIComponent(details)}&sf=true&output=xml`;
-                    syncArea = `<a href="${gUrl}" target="_blank" class="gcal-btn">Googleカレンダーに手動で追加</a>`;
+                    syncArea = `<a href="${gUrl}" target="_blank" class="gcal-btn">カレンダーに手動追加</a>`;
                 }
 
+                // ④ details/summary を使って折りたたみ構造にする
                 list.innerHTML += `
-                    <div class="day-group ${isToday}">
-                        <div class="day-header">
-                            <div class="day-date">${dateStr}</div>
-                            <div class="day-total">${totalKcal} kcal / 💩${totalPoop} cm</div>
-                        </div>
-                        <div class="day-entries">${entriesHtml || '<div style="font-size:0.7rem; color:#666;">記録なし</div>'}</div>
-                        ${syncArea}
+                    <div class="day-group ${rowClass}">
+                        <details ${openAttr}>
+                            <summary>
+                                <div class="day-header">
+                                    <div class="day-date">${dateStr}${isToday ? ' (今日)' : ''}</div>
+                                    <div class="day-total">${totalKcal} kcal / 💩 ${totalPoop} cm</div>
+                                </div>
+                            </summary>
+                            <div class="day-content">
+                                <div class="day-entries">${entriesHtml || '<div style="font-size:0.7rem; color:#666;">記録なし</div>'}</div>
+                                ${syncArea}
+                            </div>
+                        </details>
                     </div>
                 `;
             }
-        } catch (err) {
-            console.error("Render error", err);
-        }
+        } catch (err) { console.error(err); }
     }
 
     function emergencyReset() {
-        if(confirm('すべてのデータを消去しますか？（消えたデータは戻りません）')) {
-            localStorage.clear();
-            location.reload();
-        }
+        if(confirm('初期化しますか？')) { localStorage.clear(); location.reload(); }
     }
 
     window.onload = init;
