@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black Cat Health Log v14</title>
+    <title>Black Cat Health Log v15</title>
     <style>
         :root {
             --main-bg: #121212;
@@ -102,6 +102,55 @@
         
         .master-list { list-style: none; padding: 0; margin: 0; }
         .sync-status { text-align: center; font-size: 0.75rem; color: #4285F4; margin-top: 10px; font-weight: bold; }
+
+        /* カスタムポップアップのスタイル (新規追加) */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .popup-content {
+            background: #2a2a2a;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid var(--accent-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            max-width: 80%;
+        }
+        .popup-cat-img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--accent-color);
+            margin-bottom: 15px;
+        }
+        .popup-text {
+            color: var(--text-color);
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .popup-content button {
+            background: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            width: auto; /* ボタン幅を自動に */
+            margin-top: 0; /* マージンリセット */
+        }
     </style>
 </head>
 <body>
@@ -181,6 +230,14 @@
         <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec" onchange="saveSettings()">
         <p style="font-size: 0.7rem; color: #aaa;">このURLが設定されていると、記録のたびに自動同期されます。</p>
         <button onclick="emergencyReset()" style="background:#333; color:#f66; font-size:0.7rem; margin-top:20px; padding:5px;">⚠️ データを初期化する</button>
+    </div>
+</div>
+
+<div id="errorPopup" class="popup-overlay" style="display: none;">
+    <div class="popup-content">
+        <img src="image_5.png" alt="黒猫のタマ" class="popup-cat-img">
+        <p class="popup-text">うんちの状態はどうかニャ？</p>
+        <button onclick="closeErrorPopup()">はーいニャ！</button>
     </div>
 </div>
 
@@ -317,6 +374,14 @@
         }
     }
 
+    // ポップアップ操作関数 (新規追加)
+    function showErrorPopup() {
+        document.getElementById('errorPopup').style.display = 'flex';
+    }
+    function closeErrorPopup() {
+        document.getElementById('errorPopup').style.display = 'none';
+    }
+
     function saveRecord() {
         const dtStr = document.getElementById('recordDateTime').value;
         if(!dtStr) return alert('日時を選択してください');
@@ -327,6 +392,12 @@
         const amount = parseFloat(document.getElementById('amount').value) || 0;
         const poop = parseFloat(document.getElementById('poopLength').value) || 0;
         const poopCond = document.getElementById('poopCond').value;
+
+        // 新しいバリデーションチェック (課題改修)
+        if (poop > 0 && poopCond === "") {
+            showErrorPopup(); // カスタムポップアップを表示
+            return; // 保存処理を中断
+        }
 
         let calResult = 0; let detail = ""; let finalFoodIdx = -1; let finalAmount = 0;
 
