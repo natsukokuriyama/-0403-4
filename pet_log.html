@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black Cat Health Log v12.1</title>
+    <title>Black Cat Health Log v13</title>
     <style>
         :root {
             --main-bg: #121212;
@@ -78,7 +78,7 @@
         .day-total { font-size: 0.8rem; color: #aaa; }
         .day-content { padding: 0 15px 15px 15px; border-top: 1px solid #333; }
         .entry-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 0.85rem; border-bottom: 1px dotted #444; }
-        .entry-info { flex: 1; margin-right: 10px; }
+        .entry-info { flex: 1; margin-right: 10px; line-height: 1.4; }
         .entry-actions { display: flex; gap: 5px; }
 
         .btn-edit { background: #444; color: #ffcc00; padding: 4px 8px; font-size: 0.7rem; border-radius: 4px; border: 1px solid #ffcc00; cursor: pointer; min-width: 45px;}
@@ -106,14 +106,24 @@
         <label>日時を選択</label>
         <input type="datetime-local" id="recordDateTime">
         
-        <label>ごはんの内容（頻度の高い順に並んでいます）</label>
+        <label>ごはんの内容（高頻度順に表示）</label>
         <select id="foodSelect"></select>
         
-        <label>量 (g または 袋数 / 0.5刻み)</label>
+        <label>量 (g または 袋・本 / 0.5刻み)</label>
         <input type="number" id="amount" step="0.5" min="0" placeholder="例: 1.5">
         
         <label>💩 うんちの長さ (cm)</label>
         <input type="number" id="poopLength" placeholder="例: 8">
+        
+        <label>💩 うんちの状態</label>
+        <select id="poopCond">
+            <option value="">選択しない（状態を記録しない場合）</option>
+            <option value="ツルッとしてコロコロ">ツルッとしてコロコロ</option>
+            <option value="表面ペトのコロコロ">表面ペトのコロコロ</option>
+            <option value="カチカチコロコロ">カチカチコロコロ</option>
+            <option value="軟便気味">軟便気味</option>
+            <option value="下痢気味">下痢気味</option>
+        </select>
         
         <button id="saveBtn" onclick="saveRecord()">この内容で保存する</button>
         <button id="cancelBtn" onclick="cancelEdit()" style="display:none; background:#555; color:#fff; margin-top:10px;">編集をキャンセル</button>
@@ -127,11 +137,12 @@
     <div class="card" id="masterCard">
         <h2>🍔 フード・おやつ登録</h2>
         <input type="text" id="foodName" placeholder="例: プレミアム黒猫フード">
-        <label>100g または 1袋あたりのkcal</label>
+        <label>100g、1袋、または 1本あたりのkcal</label>
         <input type="number" id="foodCal" placeholder="例: 75">
         <select id="foodType">
             <option value="per100g">100gあたりの計算</option>
             <option value="perUnit">1袋あたりの計算</option>
+            <option value="perStick">1本あたりの計算</option>
         </select>
         
         <button id="masterSaveBtn" style="background: #444; color: #fff;" onclick="saveFoodMaster()">マスターに追加</button>
@@ -249,12 +260,10 @@
         }
     }
 
-    // 利用頻度を計算してセレクトボックスを更新する
     function updateFoodSelect() {
         const select = document.getElementById('foodSelect');
         const masterList = document.getElementById('masterDisplay');
         
-        // 頻度マップを作成
         const freqMap = {};
         healthLogs.forEach(log => {
             if (log.foodIdx !== undefined && log.foodIdx !== -1) {
@@ -262,7 +271,6 @@
             }
         });
 
-        // インデックスの配列を作り、頻度順にソート
         const sortedIndices = foodMaster.map((_, i) => i).sort((a, b) => {
             return (freqMap[b] || 0) - (freqMap[a] || 0);
         });
@@ -276,7 +284,7 @@
             else {
                 masterList.innerHTML = sortedIndices.map(i => {
                     const f = foodMaster[i];
-                    const typeLabel = f.type === 'per100g' ? '100g' : '1袋';
+                    const typeLabel = f.type === 'per100g' ? '100g' : (f.type === 'perUnit' ? '1袋' : '1本');
                     return `<li class="master-item"><span>${f.name} <small style="color:#aaa;">(${f.cal}kcal / ${typeLabel})</small></span><div class="master-actions"><button class="btn-edit" onclick="editFoodMaster(${i})">編集</button><button class="btn-delete" onclick="deleteFoodMaster(${i})">削除</button></div></li>`;
                 }).join('');
             }
@@ -292,28 +300,43 @@
         const foodIdx = document.getElementById('foodSelect').value;
         const amount = parseFloat(document.getElementById('amount').value) || 0;
         const poop = parseFloat(document.getElementById('poopLength').value) || 0;
+        const poopCond = document.getElementById('poopCond').value;
 
         let calResult = 0; let detail = ""; let finalFoodIdx = -1; let finalAmount = 0;
 
-        if (poop > 0) detail = `💩 うんち記録 (${poop}cm)`;
-        else if (amount > 0) {
+        if (poop > 0 || poopCond !== "") {
+            let pInfos = [];
+            if(poop > 0) pInfos.push(`${poop}cm`);
+            if(poopCond) pInfos.push(poopCond);
+            detail = `💩 うんち記録 (${pInfos.join(' / ')})`;
+        } else if (amount > 0) {
             const food = foodMaster[foodIdx];
             if(food) {
-                const unitLabel = food.type === 'per100g' ? 'g' : '袋';
+                const unitLabel = food.type === 'per100g' ? 'g' : (food.type === 'perUnit' ? '袋' : '本');
                 calResult = food.type === 'per100g' ? (food.cal * amount / 100) : (food.cal * amount);
                 detail = `🍴 ${food.name} ${amount}${unitLabel}`;
                 finalFoodIdx = parseInt(foodIdx); finalAmount = amount;
             } else return alert('フードを選択してください');
         } else return alert('入力してください');
 
-        const newLog = { date: dateStr, time: timeStr, kcal: calResult, poop: poop, detail: detail, amount: finalAmount, foodIdx: finalFoodIdx };
+        const newLog = { 
+            date: dateStr, 
+            time: timeStr, 
+            kcal: calResult, 
+            poop: poop, 
+            poopCond: poopCond, // 状態を保存
+            detail: detail, 
+            amount: finalAmount, 
+            foodIdx: finalFoodIdx 
+        };
+        
         if(editingIndex > -1) { healthLogs[editingIndex] = newLog; editingIndex = -1; }
         else healthLogs.push(newLog);
 
         localStorage.setItem('healthLogs', JSON.stringify(healthLogs));
         syncToGoogleCalendar(dateStr);
         resetForm();
-        updateFoodSelect(); // 頻度順を再計算して反映
+        updateFoodSelect(); 
         renderHistory();
     }
 
@@ -336,6 +359,7 @@
         document.getElementById('foodSelect').value = log.foodIdx !== undefined ? log.foodIdx : -1;
         document.getElementById('amount').value = log.amount || 0;
         document.getElementById('poopLength').value = log.poop || 0;
+        document.getElementById('poopCond').value = log.poopCond || ""; // 状態を復元
         document.getElementById('formTitle').innerText = "⚠️ 記録を修正中";
         document.getElementById('saveBtn').innerText = "上書き保存する";
         document.getElementById('cancelBtn').style.display = "block";
@@ -363,6 +387,7 @@
         document.getElementById('inputCard').classList.remove('edit-active');
         document.getElementById('amount').value = "";
         document.getElementById('poopLength').value = "";
+        document.getElementById('poopCond').value = ""; // 状態をリセット
         setCurrentDateTime();
     }
 
