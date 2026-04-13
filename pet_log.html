@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>タマ日報 v16.4</title>
+    <title>タマ日報 v16.5</title>
     <style>
         :root {
             --main-bg: #121212;
@@ -43,7 +43,7 @@
         h2 { font-size: 1rem; border-left: 4px solid var(--accent-color); padding-left: 10px; margin: 0 0 15px; }
         label { display: block; margin: 10px 0 5px; font-size: 0.85rem; color: #bbb; }
 
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 12px;
             border-radius: 8px;
@@ -53,6 +53,7 @@
             box-sizing: border-box;
             margin-bottom: 10px;
             font-size: 1rem;
+            font-family: monospace;
         }
 
         button {
@@ -124,6 +125,7 @@
             border: 2px solid var(--accent-color);
             box-shadow: 0 10px 30px rgba(0,0,0,0.7);
             max-width: 80%;
+            width: 300px;
         }
         .popup-cat-img {
             width: 100px;
@@ -139,8 +141,14 @@
             font-weight: bold;
             margin-bottom: 20px;
             line-height: 1.5;
+            white-space: pre-wrap;
         }
-        .popup-content button {
+        .popup-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .popup-actions button {
             background: var(--accent-color);
             color: #000;
             border: none;
@@ -148,7 +156,6 @@
             border-radius: 8px;
             font-weight: bold;
             cursor: pointer;
-            width: auto; 
             margin-top: 0; 
         }
     </style>
@@ -158,7 +165,7 @@
 <div class="container" id="top">
     <header>
         <div class="cat-icon">🐈‍⬛</div>
-        <h1>タマ日報<span class="version-text">v16.4</span></h1>
+        <h1>タマ日報<span class="version-text">v16.5</span></h1>
     </header>
 
     <div class="card" id="inputCard">
@@ -227,10 +234,13 @@
     <div class="card" style="opacity: 0.9; font-size: 0.85rem;">
         <h2>⚙️ 設定・データお引越し</h2>
         
-        <h3 style="margin-top:10px; font-size:0.9rem; border-bottom:1px solid #444; padding-bottom:5px;">📦 データを守る（バックアップ）</h3>
+        <h3 style="margin-top:10px; font-size:0.9rem; border-bottom:1px solid #444; padding-bottom:5px;">📦 データお引越しエリア</h3>
         <p style="font-size: 0.75rem; color: #aaa; margin-top:5px;">万が一消えた時のために、データを文字にして保存できます。</p>
-        <button onclick="exportData()" id="exportBtn" style="background:#4285F4; color:#fff; font-size:0.8rem; transition: background 0.3s;">① ワンタップでデータをコピーする</button>
-        <button onclick="importData()" style="background:#34A853; color:#fff; font-size:0.8rem; margin-top:8px;">② コピーした文字で復元する</button>
+        
+        <textarea id="backupText" rows="4" placeholder="【書き出し】ボタンを押すと、ここにデータの文字が出ます。&#13;&#10;【復元】する場合は、ここに文字を貼り付けてください。"></textarea>
+        
+        <button onclick="exportDataToText()" style="background:#4285F4; color:#fff; font-size:0.8rem;">① データを上の枠に出す（書き出し）</button>
+        <button onclick="importDataFromText()" style="background:#34A853; color:#fff; font-size:0.8rem; margin-top:8px;">② 上の枠のデータで復元する</button>
         
         <h3 style="margin-top:20px; font-size:0.9rem; border-bottom:1px solid #444; padding-bottom:5px;">🔄 クラウド同期設定</h3>
         <label style="margin-top:10px;">Google Apps Script (GAS) のURL</label>
@@ -243,10 +253,326 @@
 <div id="errorPopup" class="popup-overlay" style="display: none;">
     <div class="popup-content">
         <img src="image_bd131d.png" alt="黒猫のタマ" class="popup-cat-img">
-        <p class="popup-text" id="errorMsg">うんちの状態はどうかニャ？</p>
-        <button onclick="closeErrorPopup()">はーいニャ！</button>
+        <p class="popup-text" id="errorMsg">お知らせニャ</p>
+        <div class="popup-actions">
+            <button onclick="closeErrorPopup()">OKニャ！</button>
+            <button id="popupConfirmBtn" onclick="executePopupAction()" style="display: none; background: #f66; color:#fff;">はいニャ</button>
+        </div>
     </div>
 </div>
 
 <script>
-    let
+    let foodMaster = [];
+    let healthLogs = [];
+    let userSettings = { gasUrl: '' };
+    let editingIndex = -1;
+    let editingMasterIndex = -1;
+    let pendingAction = null; // ポップアップの「はい」を押した時の処理
+
+    // 💡 スマホの警告ブロック対策：オリジナルのお知らせ画面関数
+    function showMsg(msg, actionCallback = null) {
+        document.getElementById('errorMsg').innerText = msg;
+        const confirmBtn = document.getElementById('popupConfirmBtn');
+        if(actionCallback) {
+            confirmBtn.style.display = 'inline-block';
+            pendingAction = actionCallback;
+        } else {
+            confirmBtn.style.display = 'none';
+            pendingAction = null;
+        }
+        document.getElementById('errorPopup').style.display = 'flex';
+    }
+
+    function closeErrorPopup() {
+        document.getElementById('errorPopup').style.display = 'none';
+    }
+
+    function executePopupAction() {
+        if(pendingAction) pendingAction();
+        closeErrorPopup();
+    }
+
+    function loadData() {
+        try {
+            foodMaster = JSON.parse(localStorage.getItem('foodMaster')) || [];
+            healthLogs = JSON.parse(localStorage.getItem('healthLogs')) || [];
+            userSettings = JSON.parse(localStorage.getItem('userSettings')) || { gasUrl: '' };
+            
+            if (!Array.isArray(foodMaster)) foodMaster = [];
+            if (!Array.isArray(healthLogs)) healthLogs = [];
+            
+            foodMaster = foodMaster.filter(f => f && typeof f === 'object' && f.name);
+            healthLogs = healthLogs.filter(l => l && typeof l === 'object' && l.date);
+        } catch (e) {
+            foodMaster = []; healthLogs = [];
+        }
+    }
+
+    function init() {
+        loadData();
+        if(editingIndex === -1) setCurrentDateTime();
+        const gasEl = document.getElementById('gasUrl');
+        if(gasEl) gasEl.value = userSettings.gasUrl || '';
+        updateFoodSelect();
+        renderHistory();
+    }
+
+    function getLocalDateString(dateObj) {
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function setCurrentDateTime() {
+        const now = new Date();
+        const dateStr = getLocalDateString(now);
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        const el = document.getElementById('recordDateTime');
+        if(el) el.value = `${dateStr}T${hh}:${min}`;
+    }
+
+    function saveSettings() {
+        userSettings.gasUrl = document.getElementById('gasUrl').value;
+        localStorage.setItem('userSettings', JSON.stringify(userSettings));
+        renderHistory(); 
+    }
+
+    // スマホブロックを回避したマスター登録
+    function saveFoodMaster() {
+        try {
+            const nameEl = document.getElementById('foodName');
+            const calEl = document.getElementById('foodCal');
+            const typeEl = document.getElementById('foodType');
+            
+            const name = nameEl.value.trim();
+            const calStr = calEl.value;
+            const type = typeEl.value;
+
+            if(!name || !calStr) {
+                showMsg("⚠️ 「名前」と「kcal」を両方入力してニャ！");
+                return;
+            }
+
+            const cal = parseFloat(calStr);
+            if (isNaN(cal)) {
+                showMsg("⚠️ カロリーは半角数字で正しく入力してニャ！");
+                return;
+            }
+
+            if (editingMasterIndex > -1) {
+                foodMaster[editingMasterIndex] = { name: name, cal: cal, type: type };
+                editingMasterIndex = -1;
+                document.getElementById('masterSaveBtn').innerText = "🍔 マスターに追加する";
+                document.getElementById('masterCancelBtn').style.display = "none";
+                document.getElementById('masterCard').classList.remove('edit-active');
+            } else {
+                foodMaster.push({ name: name, cal: cal, type: type });
+            }
+            
+            localStorage.setItem('foodMaster', JSON.stringify(foodMaster));
+            nameEl.value = "";
+            calEl.value = "";
+            
+            updateFoodSelect();
+
+            const details = document.getElementById('masterDetails');
+            if(details) details.setAttribute('open', 'true');
+
+            showMsg(`🎉 「${name}」をマスターに登録したニャ！\n下のリストを開いて確認してニャ。`);
+            
+        } catch (error) {
+            showMsg("【システムエラー】登録に失敗しました: " + error.message);
+        }
+    }
+
+    function editFoodMaster(index) {
+        const f = foodMaster[index];
+        if(!f) return;
+        document.getElementById('foodName').value = f.name;
+        document.getElementById('foodCal').value = f.cal;
+        document.getElementById('foodType').value = f.type || 'per100g';
+        editingMasterIndex = index;
+        document.getElementById('masterSaveBtn').innerText = "上書き保存する";
+        document.getElementById('masterCancelBtn').style.display = "block";
+        document.getElementById('masterCard').classList.add('edit-active');
+        document.getElementById('masterCard').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function cancelMasterEdit() {
+        editingMasterIndex = -1;
+        document.getElementById('foodName').value = "";
+        document.getElementById('foodCal').value = "";
+        document.getElementById('masterSaveBtn').innerText = "🍔 マスターに追加する";
+        document.getElementById('masterCancelBtn').style.display = "none";
+        document.getElementById('masterCard').classList.remove('edit-active');
+    }
+
+    function deleteFoodMaster(index) {
+        showMsg("本当にこのマスター情報を削除するニャ？", () => {
+            foodMaster.splice(index, 1);
+            localStorage.setItem('foodMaster', JSON.stringify(foodMaster));
+            updateFoodSelect();
+        });
+    }
+
+    function updateFoodSelect() {
+        try {
+            const select = document.getElementById('foodSelect');
+            const masterList = document.getElementById('masterDisplay');
+            const countText = document.getElementById('masterCountText');
+            
+            const freqMap = {};
+            healthLogs.forEach(log => {
+                if (log && log.foodIdx !== undefined && log.foodIdx !== -1) {
+                    freqMap[log.foodIdx] = (freqMap[log.foodIdx] || 0) + 1;
+                }
+            });
+
+            const validIndices = foodMaster
+                .map((f, i) => (f && typeof f === 'object' && f.name) ? i : -1)
+                .filter(i => i !== -1);
+
+            const sortedIndices = validIndices.sort((a, b) => {
+                return (freqMap[b] || 0) - (freqMap[a] || 0);
+            });
+
+            if(select) {
+                select.innerHTML = sortedIndices.map(i => `<option value="${i}">${foodMaster[i].name}</option>`).join('');
+            }
+            
+            if(countText) countText.innerText = `${validIndices.length}件`;
+
+            if(masterList) {
+                if(validIndices.length === 0) {
+                    masterList.innerHTML = "<li style='color:#666; padding:15px 0;'>まだ登録されていません</li>";
+                } else {
+                    masterList.innerHTML = sortedIndices.map(i => {
+                        const f = foodMaster[i];
+                        const typeLabel = f.type === 'per100g' ? '100g' : (f.type === 'perUnit' ? '1袋' : (f.type === 'perStick' ? '1本' : '1cm'));
+                        return `<li class="master-item"><div class="master-info"><b>${f.name}</b><br><small style="color:#aaa;">${f.cal}kcal / ${typeLabel}</small></div><div class="master-actions"><button class="btn-edit" onclick="editFoodMaster(${i})">編集</button><button class="btn-delete" onclick="deleteFoodMaster(${i})">削除</button></div></li>`;
+                    }).join('');
+                }
+            }
+        } catch (error) {
+            console.error("リストの表示中にエラー:", error);
+        }
+    }
+
+    function saveRecord() {
+        try {
+            const dtStr = document.getElementById('recordDateTime').value;
+            if(!dtStr) return showMsg('日時を選択してニャ！');
+            const parts = dtStr.split('T');
+            const dateStr = parts[0];
+            const timeStr = parts[1] || "00:00";
+            const foodIdx = document.getElementById('foodSelect').value;
+            const amount = parseFloat(document.getElementById('amount').value) || 0;
+            const poop = parseFloat(document.getElementById('poopLength').value) || 0;
+            const poopCond = document.getElementById('poopCond').value;
+
+            if (poop > 0 && poopCond === "") {
+                return showMsg("うんちの状態はどうかニャ？");
+            }
+
+            let calResult = 0; let detail = ""; let finalFoodIdx = -1; let finalAmount = 0;
+
+            if (poop > 0 || poopCond !== "") {
+                let pInfos = [];
+                if(poop > 0) pInfos.push(`${poop}cm`);
+                if(poopCond) pInfos.push(poopCond);
+                detail = `💩 うんち記録 (${pInfos.join(' / ')})`;
+            } else if (amount > 0) {
+                const food = foodMaster[foodIdx];
+                if(food) {
+                    const unitLabel = food.type === 'per100g' ? 'g' : (food.type === 'perUnit' ? '袋' : (food.type === 'perStick' ? '本' : 'cm'));
+                    calResult = food.type === 'per100g' ? (food.cal * amount / 100) : (food.cal * amount);
+                    detail = `🍴 ${food.name} ${amount}${unitLabel}`;
+                    finalFoodIdx = parseInt(foodIdx); finalAmount = amount;
+                } else return showMsg('フードを選択してニャ！');
+            } else return showMsg('入力してニャ！');
+
+            const newLog = { 
+                date: dateStr, time: timeStr, kcal: calResult, poop: poop, poopCond: poopCond, detail: detail, amount: finalAmount, foodIdx: finalFoodIdx 
+            };
+            
+            if(editingIndex > -1) { healthLogs[editingIndex] = newLog; editingIndex = -1; }
+            else healthLogs.push(newLog);
+
+            localStorage.setItem('healthLogs', JSON.stringify(healthLogs));
+            syncToGoogleCalendar(dateStr);
+            resetForm();
+            updateFoodSelect(); 
+            renderHistory();
+        } catch (error) {
+            showMsg("記録の保存中にエラーが発生したニャ: " + error.message);
+        }
+    }
+
+    async function syncToGoogleCalendar(dateStr) {
+        const gasUrl = userSettings.gasUrl;
+        if (!gasUrl || !gasUrl.startsWith("http")) return;
+        const dayLogs = healthLogs.filter(l => l && l.date === dateStr);
+        const totalKcal = dayLogs.reduce((sum, l) => sum + (Number(l.kcal) || 0), 0).toFixed(0);
+        const totalPoop = dayLogs.reduce((sum, l) => sum + (Number(l.poop) || 0), 0).toFixed(1);
+        let details = "■内訳\n";
+        dayLogs.sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")).forEach(l => { details += `・${l.time}：${l.detail}\n`; });
+        try { fetch(gasUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: dateStr, totalKcal: totalKcal, totalPoop: totalPoop, details: details }) }); } catch (e) {}
+    }
+
+    function editRecord(index) {
+        editingIndex = index;
+        const log = healthLogs[index];
+        if(!log) return;
+        document.getElementById('recordDateTime').value = `${log.date}T${log.time || '00:00'}`;
+        document.getElementById('foodSelect').value = log.foodIdx !== undefined ? log.foodIdx : -1;
+        document.getElementById('amount').value = log.amount || 0;
+        document.getElementById('poopLength').value = log.poop || 0;
+        document.getElementById('poopCond').value = log.poopCond || "";
+        document.getElementById('formTitle').innerText = "⚠️ 修正中";
+        document.getElementById('saveBtn').innerText = "上書き保存";
+        document.getElementById('cancelBtn').style.display = "block";
+        document.getElementById('inputCard').classList.add('edit-active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteRecord(index) {
+        showMsg("この記録を本当に消去するニャ？", () => {
+            const dateStr = healthLogs[index].date;
+            healthLogs.splice(index, 1);
+            localStorage.setItem('healthLogs', JSON.stringify(healthLogs));
+            syncToGoogleCalendar(dateStr);
+            updateFoodSelect();
+            renderHistory();
+        });
+    }
+
+    function cancelEdit() { editingIndex = -1; resetForm(); }
+
+    function resetForm() {
+        document.getElementById('formTitle').innerText = "📝 記録入力";
+        document.getElementById('saveBtn').innerText = "この内容で保存する";
+        document.getElementById('cancelBtn').style.display = "none";
+        document.getElementById('inputCard').classList.remove('edit-active');
+        document.getElementById('amount').value = "";
+        document.getElementById('poopLength').value = "";
+        document.getElementById('poopCond').value = "";
+        setCurrentDateTime();
+    }
+
+    function renderHistory() {
+        try {
+            const list = document.getElementById('historyList');
+            if(!list) return;
+            list.innerHTML = '';
+            const now = new Date();
+            const todayStr = getLocalDateString(now);
+            for (let i = 0; i < 14; i++) {
+                const d = new Date();
+                d.setDate(now.getDate() - i);
+                const dateStr = getLocalDateString(d);
+                const dayLogs = healthLogs
+                    .map((l, idx) => ({...l, originalIndex: idx}))
+                    .filter(l => l && l.date === dateStr)
+                    .sort((a, b) => (a.time || "00:00").locale
