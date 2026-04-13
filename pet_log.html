@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black Cat Health Log v15.1</title>
+    <title>タマ日報 v16</title>
     <style>
         :root {
             --main-bg: #121212;
@@ -158,7 +158,7 @@
 <div class="container" id="top">
     <header>
         <div class="cat-icon">🐈‍⬛</div>
-        <h1>Black Cat Health Log</h1>
+        <h1>タマ日報</h1>
     </header>
 
     <div class="card" id="inputCard">
@@ -169,8 +169,8 @@
         <label>ごはんの内容（高頻度順に表示）</label>
         <select id="foodSelect"></select>
         
-        <label>量 (g, 袋, 本, cm / 0.5刻み)</label>
-        <input type="number" id="amount" step="0.5" min="0" placeholder="例: 1.5">
+        <label>量 (g, 袋, 本, cm / 0.25刻み)</label>
+        <input type="number" id="amount" step="0.25" min="0" placeholder="例: 1.25">
         
         <label>💩 うんちの長さ (cm)</label>
         <input type="number" id="poopLength" placeholder="例: 8">
@@ -320,204 +320,4 @@
         document.getElementById('masterSaveBtn').innerText = "上書き保存する";
         document.getElementById('masterCancelBtn').style.display = "block";
         document.getElementById('masterCard').classList.add('edit-active');
-        document.getElementById('masterCard').scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function cancelMasterEdit() {
-        editingMasterIndex = -1;
-        document.getElementById('foodName').value = "";
-        document.getElementById('foodCal').value = "";
-        document.getElementById('masterSaveBtn').innerText = "マスターに追加";
-        document.getElementById('masterCancelBtn').style.display = "none";
-        document.getElementById('masterCard').classList.remove('edit-active');
-    }
-
-    function deleteFoodMaster(index) {
-        if(confirm('削除しますか？')) {
-            foodMaster.splice(index, 1);
-            localStorage.setItem('foodMaster', JSON.stringify(foodMaster));
-            updateFoodSelect();
-        }
-    }
-
-    function updateFoodSelect() {
-        const select = document.getElementById('foodSelect');
-        const masterList = document.getElementById('masterDisplay');
-        const countText = document.getElementById('masterCountText');
-        
-        const freqMap = {};
-        healthLogs.forEach(log => {
-            if (log.foodIdx !== undefined && log.foodIdx !== -1) {
-                freqMap[log.foodIdx] = (freqMap[log.foodIdx] || 0) + 1;
-            }
-        });
-
-        const sortedIndices = foodMaster.map((_, i) => i).sort((a, b) => {
-            return (freqMap[b] || 0) - (freqMap[a] || 0);
-        });
-
-        if(select) {
-            select.innerHTML = sortedIndices.map(i => `<option value="${i}">${foodMaster[i].name}</option>`).join('');
-        }
-        
-        if(countText) countText.innerText = `${foodMaster.length}件`;
-
-        if(masterList) {
-            if(foodMaster.length === 0) masterList.innerHTML = "<li style='color:#666; padding:15px 0;'>まだ登録されていません</li>";
-            else {
-                masterList.innerHTML = sortedIndices.map(i => {
-                    const f = foodMaster[i];
-                    const typeLabel = f.type === 'per100g' ? '100g' : (f.type === 'perUnit' ? '1袋' : (f.type === 'perStick' ? '1本' : '1cm'));
-                    return `<li class="master-item"><div class="master-info"><b>${f.name}</b><br><small style="color:#aaa;">${f.cal}kcal / ${typeLabel}</small></div><div class="master-actions"><button class="btn-edit" onclick="editFoodMaster(${i})">編集</button><button class="btn-delete" onclick="deleteFoodMaster(${i})">削除</button></div></li>`;
-                }).join('');
-            }
-        }
-    }
-
-    // ポップアップ操作関数
-    function showErrorPopup() {
-        document.getElementById('errorPopup').style.display = 'flex';
-    }
-    function closeErrorPopup() {
-        document.getElementById('errorPopup').style.display = 'none';
-    }
-
-    function saveRecord() {
-        const dtStr = document.getElementById('recordDateTime').value;
-        if(!dtStr) return alert('日時を選択してください');
-        const parts = dtStr.split('T');
-        const dateStr = parts[0];
-        const timeStr = parts[1] || "00:00";
-        const foodIdx = document.getElementById('foodSelect').value;
-        const amount = parseFloat(document.getElementById('amount').value) || 0;
-        const poop = parseFloat(document.getElementById('poopLength').value) || 0;
-        const poopCond = document.getElementById('poopCond').value;
-
-        // バリデーションチェック
-        if (poop > 0 && poopCond === "") {
-            showErrorPopup(); 
-            return; 
-        }
-
-        let calResult = 0; let detail = ""; let finalFoodIdx = -1; let finalAmount = 0;
-
-        if (poop > 0 || poopCond !== "") {
-            let pInfos = [];
-            if(poop > 0) pInfos.push(`${poop}cm`);
-            if(poopCond) pInfos.push(poopCond);
-            detail = `💩 うんち記録 (${pInfos.join(' / ')})`;
-        } else if (amount > 0) {
-            const food = foodMaster[foodIdx];
-            if(food) {
-                const unitLabel = food.type === 'per100g' ? 'g' : (food.type === 'perUnit' ? '袋' : (food.type === 'perStick' ? '本' : 'cm'));
-                calResult = food.type === 'per100g' ? (food.cal * amount / 100) : (food.cal * amount);
-                detail = `🍴 ${food.name} ${amount}${unitLabel}`;
-                finalFoodIdx = parseInt(foodIdx); finalAmount = amount;
-            } else return alert('フードを選択してください');
-        } else return alert('入力してください');
-
-        const newLog = { 
-            date: dateStr, time: timeStr, kcal: calResult, poop: poop, poopCond: poopCond, detail: detail, amount: finalAmount, foodIdx: finalFoodIdx 
-        };
-        
-        if(editingIndex > -1) { healthLogs[editingIndex] = newLog; editingIndex = -1; }
-        else healthLogs.push(newLog);
-
-        localStorage.setItem('healthLogs', JSON.stringify(healthLogs));
-        syncToGoogleCalendar(dateStr);
-        resetForm();
-        updateFoodSelect(); 
-        renderHistory();
-    }
-
-    async function syncToGoogleCalendar(dateStr) {
-        const gasUrl = userSettings.gasUrl;
-        if (!gasUrl || !gasUrl.startsWith("http")) return;
-        const dayLogs = healthLogs.filter(l => l.date === dateStr);
-        const totalKcal = dayLogs.reduce((sum, l) => sum + (Number(l.kcal) || 0), 0).toFixed(0);
-        const totalPoop = dayLogs.reduce((sum, l) => sum + (Number(l.poop) || 0), 0).toFixed(1);
-        let details = "■内訳\n";
-        dayLogs.sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")).forEach(l => { details += `・${l.time}：${l.detail}\n`; });
-        try { fetch(gasUrl, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: dateStr, totalKcal: totalKcal, totalPoop: totalPoop, details: details }) }); } catch (e) {}
-    }
-
-    function editRecord(index) {
-        editingIndex = index;
-        const log = healthLogs[index];
-        if(!log) return;
-        document.getElementById('recordDateTime').value = `${log.date}T${log.time || '00:00'}`;
-        document.getElementById('foodSelect').value = log.foodIdx !== undefined ? log.foodIdx : -1;
-        document.getElementById('amount').value = log.amount || 0;
-        document.getElementById('poopLength').value = log.poop || 0;
-        document.getElementById('poopCond').value = log.poopCond || "";
-        document.getElementById('formTitle').innerText = "⚠️ 修正中";
-        document.getElementById('saveBtn').innerText = "上書き保存";
-        document.getElementById('cancelBtn').style.display = "block";
-        document.getElementById('inputCard').classList.add('edit-active');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    function deleteRecord(index) {
-        if(confirm('消去しますか？')) {
-            const dateStr = healthLogs[index].date;
-            healthLogs.splice(index, 1);
-            localStorage.setItem('healthLogs', JSON.stringify(healthLogs));
-            syncToGoogleCalendar(dateStr);
-            updateFoodSelect();
-            renderHistory();
-        }
-    }
-
-    function cancelEdit() { editingIndex = -1; resetForm(); }
-
-    function resetForm() {
-        document.getElementById('formTitle').innerText = "📝 記録入力";
-        document.getElementById('saveBtn').innerText = "この内容で保存する";
-        document.getElementById('cancelBtn').style.display = "none";
-        document.getElementById('inputCard').classList.remove('edit-active');
-        document.getElementById('amount').value = "";
-        document.getElementById('poopLength').value = "";
-        document.getElementById('poopCond').value = "";
-        setCurrentDateTime();
-    }
-
-    function renderHistory() {
-        const list = document.getElementById('historyList');
-        if(!list) return;
-        list.innerHTML = '';
-        const now = new Date();
-        const todayStr = getLocalDateString(now);
-        for (let i = 0; i < 14; i++) {
-            const d = new Date();
-            d.setDate(now.getDate() - i);
-            const dateStr = getLocalDateString(d);
-            const dayLogs = healthLogs
-                .map((l, idx) => ({...l, originalIndex: idx}))
-                .filter(l => l.date === dateStr)
-                .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
-            if (dayLogs.length === 0 && i > 0) continue;
-            const totalKcal = dayLogs.reduce((sum, l) => sum + (Number(l.kcal) || 0), 0).toFixed(0);
-            const totalPoop = dayLogs.reduce((sum, l) => sum + (Number(l.poop) || 0), 0).toFixed(1);
-            const isToday = dateStr === todayStr;
-            const openAttr = isToday ? 'open' : '';
-            const rowClass = isToday ? 'today-row' : '';
-            let entriesHtml = dayLogs.map(l => `<div class="entry-item"><div class="entry-info"><b>${l.time || '--:--'}</b> ${l.detail || '記録'} <span style="color:#888;">(${(Number(l.kcal) || 0).toFixed(0)}kcal)</span></div><div class="entry-actions"><button class="btn-edit" onclick="editRecord(${l.originalIndex})">修正</button><button class="btn-delete" onclick="deleteRecord(${l.originalIndex})">消去</button></div></div>`).join('');
-            let syncArea = '';
-            if (userSettings.gasUrl && userSettings.gasUrl.startsWith("http")) syncArea = `<div class="sync-status">🔄 自動同期済み</div>`;
-            else {
-                const title = `【タマ日報】${totalKcal}kcal / 💩${totalPoop}cm`;
-                const gDate = dateStr.replace(/-/g, '');
-                let details = "■内訳\n";
-                dayLogs.forEach(l => { details += `・${l.time}：${l.detail || '記録'}\n`; });
-                const gUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${gDate}/${gDate}&details=${encodeURIComponent(details)}&sf=true&output=xml`;
-                syncArea = `<a href="${gUrl}" target="_blank" class="gcal-btn">カレンダーに追加</a>`;
-            }
-            list.innerHTML += `<div class="day-group ${rowClass}"><details ${openAttr}><summary><div class="header-common"><div class="day-date icon-arrow">${dateStr}${isToday ? ' (今日)' : ''}</div><div class="day-total">${totalKcal} kcal / 💩 ${totalPoop} cm</div></div></summary><div class="content-common"><div class="day-entries">${entriesHtml || '<div style="font-size:0.7rem; color:#666;">記録なし</div>'}</div>${syncArea}</div></details></div>`;
-        }
-    }
-
-    function emergencyReset() { if(confirm('初期化しますか？')) { localStorage.clear(); location.reload(); } }
-    window.onload = init;
-</script>
-</body>
-</html>
+        document
